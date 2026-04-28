@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0a0c0f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="財經助理">
+  <meta name="description" content="每日兩堂財經課：中階 + 困難，AI 根據市場熱點出題">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>財經助理</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    :root{
+      --bg:#0a0c0f;--surface:#111418;--surface2:#181c22;--surface3:#1e242c;
+      --border:#2a3040;--border2:#3a4255;
+      --text:#e8eaf0;--text2:#8a93a6;--text3:#4a5568;
+      --gold:#c9a84c;--gold2:#e8c56a;--gold3:#f5d98a;
+      --mid:#BA7517;--mid-bg:#2a1a00;--mid-light:#FAEEDA;--mid-dark:#633806;
+      --hard:#A32D2D;--hard-bg:#200a0a;--hard-light:#FCEBEB;--hard-dark:#791F1F;
+      --green:#4ade80;--green-bg:#0a2010;--red:#f87171;
+      font-family:'Noto Serif TC',serif;
+      color:var(--text);
+      background:var(--bg);
+    }
+    body{background:var(--bg);min-height:100vh;min-height:100dvh;overscroll-behavior:none}
+
+    /* API Gate */
+    #apigate{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;flex-direction:column;justify-content:center;padding:32px 24px}
+    #apigate h2{font-size:20px;font-weight:700;margin-bottom:8px;color:var(--gold2)}
+    #apigate p{font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:24px}
+    #apigate a{color:#2dd4bf;text-decoration:none}
+    #apigate input{width:100%;padding:14px;background:var(--surface2);border:0.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:14px;font-family:'DM Mono',monospace;margin-bottom:12px;outline:none}
+    #apigate input:focus{border-color:var(--gold)}
+    #gate-btn{width:100%;padding:14px;background:var(--mid-bg);border:0.5px solid var(--gold);border-radius:8px;color:var(--gold2);font-size:14px;cursor:pointer;letter-spacing:0.05em}
+    #gate-err{font-size:12px;color:var(--red);margin-top:8px;display:none}
+    #gate-note{font-size:11px;color:var(--text3);margin-top:12px;line-height:1.6}
+
+    /* App */
+    .app{max-width:480px;margin:0 auto;min-height:100vh;min-height:100dvh;padding-bottom:88px}
+    .header{padding:calc(env(safe-area-inset-top,16px) + 16px) 20px 0;display:flex;justify-content:space-between;align-items:center}
+    .header-label{font-size:11px;letter-spacing:0.15em;color:var(--text3);text-transform:uppercase;font-family:'DM Mono',monospace}
+    .header-date{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace}
+
+    .hero{padding:14px 20px 20px}
+    .hero h1{font-size:22px;font-weight:700;line-height:1.3}
+    .hero h1 .mid-c{color:var(--gold2)}
+    .hero h1 .hard-c{color:#f87171}
+    .hero p{font-size:13px;color:var(--text2);margin-top:6px;line-height:1.6}
+
+    /* Level tabs */
+    .tabs{display:flex;padding:0 20px;gap:4px;margin-bottom:20px;border-bottom:0.5px solid var(--border)}
+    .tab{flex:1;padding:10px 8px;font-size:12px;font-family:'DM Mono',monospace;letter-spacing:0.05em;cursor:pointer;color:var(--text3);background:none;border:none;border-bottom:2px solid transparent;transition:all 0.2s;margin-bottom:-1px;text-align:center}
+    .tab.mid.active{color:var(--gold2);border-bottom-color:var(--gold2)}
+    .tab.hard.active{color:#f87171;border-bottom-color:#f87171}
+    .tab:hover:not(.active){color:var(--text2)}
+
+    .section{padding:0 20px;display:none}
+    .section.active{display:block}
+
+    /* Generate button */
+    .gen-btn{width:100%;padding:14px;border-radius:8px;font-size:14px;font-family:'Noto Serif TC',serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all 0.2s;letter-spacing:0.05em;border:0.5px solid}
+    .gen-btn:active{transform:scale(0.98)}
+    .gen-btn:disabled{opacity:0.45;cursor:not-allowed}
+    .gen-btn.mid{background:var(--mid-bg);border-color:var(--gold);color:var(--gold2)}
+    .gen-btn.hard{background:var(--hard-bg);border-color:#f87171;color:#f87171}
+
+    /* Loading */
+    .loading-bar{height:2px;background:var(--surface2);border-radius:1px;overflow:hidden;margin:12px 0}
+    .loading-bar-inner{height:100%;width:0;border-radius:1px;transition:width 0.4s}
+    .lbar-mid{background:linear-gradient(90deg,var(--gold),var(--gold2))}
+    .lbar-hard{background:linear-gradient(90deg,#f87171,#fca5a5)}
+
+    /* Lesson card */
+    .lesson-wrap{margin-top:16px}
+    .lesson-card{background:var(--surface);border:0.5px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px}
+    .lesson-header{padding:16px 16px 12px;border-bottom:0.5px solid var(--border)}
+    .lesson-badge{display:inline-block;font-size:10px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:4px;letter-spacing:0.08em;margin-bottom:8px}
+    .badge-mid{background:var(--mid-bg);color:var(--gold2);border:0.5px solid var(--mid)}
+    .badge-hard{background:var(--hard-bg);color:#fca5a5;border:0.5px solid var(--hard)}
+    .lesson-title{font-size:16px;font-weight:700;color:var(--text);line-height:1.4}
+    .lesson-body{padding:16px;font-size:13px;color:var(--text2);line-height:1.85}
+    .lesson-body p{margin-bottom:12px}
+    .lesson-body p:last-child{margin-bottom:0}
+    .highlight{padding:10px 12px;border-radius:0 6px 6px 0;margin:14px 0;font-size:12px;line-height:1.6;border-left:2px solid}
+    .hl-mid{border-color:var(--gold);background:var(--mid-bg);color:var(--gold3)}
+    .hl-hard{border-color:#f87171;background:var(--hard-bg);color:#fca5a5}
+    .lesson-quiz{padding:16px;border-top:0.5px solid var(--border)}
+    .quiz-label{font-size:10px;letter-spacing:0.12em;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px}
+    .quiz-q{font-size:13px;color:var(--text);margin-bottom:10px;line-height:1.5}
+    .quiz-opts{display:flex;flex-direction:column;gap:7px}
+    .qopt{padding:11px 13px;background:var(--surface2);border:0.5px solid var(--border);border-radius:8px;font-size:12px;color:var(--text2);cursor:pointer;transition:all 0.15s;text-align:left;font-family:'Noto Serif TC',serif}
+    .qopt:active{transform:scale(0.98)}
+    .qopt.correct{background:var(--green-bg);border-color:var(--green);color:var(--green)}
+    .qopt.wrong{background:var(--hard-bg);border-color:var(--red);color:var(--red)}
+    .quiz-result{font-size:12px;margin-top:10px;text-align:center;padding:8px;border-radius:6px}
+    .qr-pass{background:var(--green-bg);color:var(--green)}
+    .qr-fail{background:var(--hard-bg);color:var(--red)}
+
+    /* Topic info */
+    .topic-meta{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:6px;line-height:1.6}
+
+    /* Empty */
+    .empty{text-align:center;padding:44px 20px;color:var(--text3)}
+    .empty svg{margin-bottom:12px;opacity:0.2}
+    .empty p{font-size:13px;line-height:1.7}
+
+    /* Bottom nav */
+    .bottom-nav{position:fixed;bottom:0;left:0;right:0;padding:10px 20px calc(env(safe-area-inset-bottom,0px) + 10px);background:rgba(10,12,15,0.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:0.5px solid var(--border);display:flex;justify-content:center;max-width:480px;margin:0 auto}
+    .nav-btn{flex:1;background:none;border:none;cursor:pointer;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--text3);transition:color 0.2s}
+    .nav-btn.mid.active{color:var(--gold2)}
+    .nav-btn.hard.active{color:#f87171}
+    .nav-btn svg{width:20px;height:20px}
+    .nav-btn span{font-size:10px;font-family:'DM Mono',monospace}
+
+    /* Settings */
+    .settings-panel{position:fixed;inset:0;background:var(--bg);z-index:50;transform:translateX(100%);transition:transform 0.3s ease;padding:calc(env(safe-area-inset-top,16px)+16px) 24px 24px;overflow-y:auto}
+    .settings-panel.open{transform:translateX(0)}
+    .settings-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}
+    .settings-header h2{font-size:18px;font-weight:700}
+    .close-btn{background:none;border:none;cursor:pointer;color:var(--text2);font-size:20px;padding:4px}
+    .setting-label{font-size:11px;letter-spacing:0.12em;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:8px;text-transform:uppercase}
+    .setting-input{width:100%;padding:12px;background:var(--surface2);border:0.5px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;font-family:'DM Mono',monospace;outline:none;margin-bottom:16px}
+    .setting-input:focus{border-color:var(--gold)}
+    .save-btn{width:100%;padding:13px;background:var(--mid-bg);border:0.5px solid var(--gold);border-radius:8px;color:var(--gold2);font-size:14px;cursor:pointer}
+    .danger-btn{background:none;border:none;color:var(--red);font-size:12px;cursor:pointer;padding:8px 0;margin-top:12px}
+
+    .spinner{display:inline-block;width:14px;height:14px;border:1.5px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite}
+    .spinner.hard{border-top-color:#f87171}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    .toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--surface3);border:0.5px solid var(--border2);border-radius:8px;padding:10px 18px;font-size:12px;color:var(--text2);z-index:200;opacity:0;transition:opacity 0.3s;pointer-events:none;white-space:nowrap}
+    .toast.show{opacity:1}
+  </style>
+</head>
+<body>
+
+<!-- API Gate -->
+<div id="apigate">
+  <div style="margin-bottom:32px">
+    <div style="font-size:11px;letter-spacing:0.15em;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:16px">財經助理</div>
+    <h2>設定 API 金鑰</h2>
+    <p>本 App 使用 Anthropic Claude API。請輸入你的 API Key 開始使用。<br><br>
+    還沒有？<a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> 免費申請，新帳號有 $5 免費額度。</p>
+  </div>
+  <input type="password" id="api-input" placeholder="sk-ant-api03-..." autocomplete="off" spellcheck="false">
+  <div id="gate-err">金鑰格式不正確，請確認後再試</div>
+  <button id="gate-btn" onclick="saveApiKey()">確認並進入 →</button>
+  <div id="gate-note">✓ 金鑰只儲存在你的裝置，不會上傳任何伺服器<br>✓ 每堂課約消耗 $0.002 USD（台幣不到 0.1 元）</div>
+</div>
+
+<!-- Main App -->
+<div class="app" id="main-app" style="display:none">
+  <div class="header">
+    <div class="header-label">財經助理</div>
+    <div class="header-date" id="hdate"></div>
+  </div>
+
+  <div class="hero">
+    <h1>每日兩課<br><span class="mid-c">中階</span> + <span class="hard-c">困難</span></h1>
+    <p>AI 根據今日市場熱點自動選題<br>台股 · 美股 · 總體經濟</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab mid active" id="tab-mid-btn" onclick="switchTab('mid')">中階</button>
+    <button class="tab hard" id="tab-hard-btn" onclick="switchTab('hard')">困難</button>
+  </div>
+
+  <div class="section active" id="tab-mid">
+    <button class="gen-btn mid" id="mid-btn" onclick="fetchLesson('mid')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      生成今日中階課程
+    </button>
+    <div class="loading-bar" id="mid-loading" style="display:none"><div class="loading-bar-inner lbar-mid" id="mid-bar"></div></div>
+    <div class="lesson-wrap" id="mid-output">
+      <div class="empty">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <p>點擊上方按鈕<br>AI 根據今日市場熱點<br>生成中階財經知識課</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" id="tab-hard">
+    <button class="gen-btn hard" id="hard-btn" onclick="fetchLesson('hard')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      生成今日困難課程
+    </button>
+    <div class="loading-bar" id="hard-loading" style="display:none"><div class="loading-bar-inner lbar-hard" id="hard-bar"></div></div>
+    <div class="lesson-wrap" id="hard-output">
+      <div class="empty">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        <p>點擊上方按鈕<br>AI 根據今日市場熱點<br>生成困難財經策略課</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Nav -->
+<div class="bottom-nav" id="bottom-nav" style="display:none">
+  <button class="nav-btn mid active" id="nav-mid" onclick="switchTab('mid')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    <span>中階</span>
+  </button>
+  <button class="nav-btn hard" id="nav-hard" onclick="switchTab('hard')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    <span>困難</span>
+  </button>
+  <button class="nav-btn" id="nav-settings" onclick="toggleSettings()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    <span>設定</span>
+  </button>
+</div>
+
+<!-- Settings -->
+<div class="settings-panel" id="settings-panel">
+  <div class="settings-header">
+    <h2>設定</h2>
+    <button class="close-btn" onclick="toggleSettings()">✕</button>
+  </div>
+  <div class="setting-label">Anthropic API Key</div>
+  <input type="password" class="setting-input" id="settings-key" placeholder="sk-ant-api03-...">
+  <div style="font-size:11px;color:var(--text3);margin-top:-10px;margin-bottom:20px;line-height:1.6">金鑰僅儲存在本機，不會上傳</div>
+  <div class="setting-label">版本</div>
+  <div style="font-size:13px;color:var(--text2);font-family:'DM Mono',monospace;margin-bottom:20px">v2.0.0 — 中階 + 困難</div>
+  <button class="save-btn" onclick="saveSettings()">儲存設定</button>
+  <div><button class="danger-btn" onclick="clearKey()">清除 API Key 並登出</button></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORE = 'finance_app_v2_key';
+let KEY = localStorage.getItem(STORE) || '';
+const answered = { mid: false, hard: false };
+
+const today = new Date();
+document.getElementById('hdate').textContent = today.toLocaleDateString('zh-TW',{month:'numeric',day:'numeric',weekday:'short'});
+
+function init(){
+  if(KEY && KEY.startsWith('sk-ant')){ showApp(); }
+  else { document.getElementById('apigate').style.display='flex'; }
+}
+
+function showApp(){
+  document.getElementById('apigate').style.display='none';
+  document.getElementById('main-app').style.display='block';
+  document.getElementById('bottom-nav').style.display='flex';
+  document.getElementById('settings-key').value = KEY;
+}
+
+function saveApiKey(){
+  const k = document.getElementById('api-input').value.trim();
+  if(!k.startsWith('sk-ant')){ document.getElementById('gate-err').style.display='block'; return; }
+  localStorage.setItem(STORE,k); KEY=k; showApp();
+}
+
+function saveSettings(){
+  const k = document.getElementById('settings-key').value.trim();
+  if(k){ localStorage.setItem(STORE,k); KEY=k; }
+  toggleSettings(); showToast('設定已儲存');
+}
+
+function clearKey(){
+  if(confirm('確認清除 API Key 並登出？')){
+    localStorage.removeItem(STORE); KEY='';
+    document.getElementById('main-app').style.display='none';
+    document.getElementById('bottom-nav').style.display='none';
+    document.getElementById('apigate').style.display='flex';
+    document.getElementById('api-input').value='';
+  }
+}
+
+function toggleSettings(){
+  document.getElementById('settings-panel').classList.toggle('open');
+}
+
+function switchTab(t){
+  ['mid','hard'].forEach(id=>{
+    document.getElementById('tab-'+id+'-btn').classList.toggle('active', id===t);
+    document.getElementById('tab-'+id).classList.toggle('active', id===t);
+    document.getElementById('nav-'+id).classList.toggle('active', id===t);
+  });
+  document.getElementById('nav-settings').classList.remove('active');
+}
+
+function showToast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),2000);
+}
+
+function animateBar(id){
+  const bar=document.getElementById(id);
+  let w=0;
+  const step=()=>{ w=Math.min(w+Math.random()*5+2,88); bar.style.width=w+'%'; if(w<88)setTimeout(step,450); };
+  step();
+  return ()=>{ bar.style.width='100%'; };
+}
+
+async function callClaude(prompt){
+  const res = await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key': KEY,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body: JSON.stringify({
+      model:'claude-sonnet-4-20250514',
+      max_tokens:1000,
+      tools:[{type:'web_search_20250305',name:'web_search'}],
+      messages:[{role:'user',content:prompt}]
+    })
+  });
+  if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||'API 錯誤'); }
+  const data=await res.json();
+  return data.content.map(i=>i.type==='text'?i.text:'').filter(Boolean).join('\n');
+}
+
+const PROMPTS = {
+  mid: (d) => `你是財經教育家。今天是 ${d}。
+搜尋今日台股、美股、總體經濟（Fed、利率、匯率、財報）的市場熱點，選一個最值得深入理解的主題，
+為「有基礎想深化理解」的中階投資人生成繁體中文教學。
+
+要求：
+- 假設讀者懂基本財務概念（本益比、殖利率、通膨等）
+- 須說明機制與因果邏輯，不只是定義
+- 結合近期實際市場案例
+- 長度約 280-320 字，分 2-3 段
+
+嚴格 JSON 回傳，無任何前置文字或 markdown：
+{"topic":"主題10字內","market_context":"為何今天選這個主題（一句話，提及具體市場事件）","content":"教學內容，段落間用\\n\\n分隔","highlight":"核心重點一句話，45字內","quiz":{"q":"測驗問題","options":["A.選項","B.選項","C.選項","D.選項"],"answer":0}}`,
+
+  hard: (d) => `你是財經策略分析師。今天是 ${d}。
+搜尋今日台股、美股、總體經濟最重要的市場事件，選一個需要深度分析能力的主題，
+為「理解市場機制、想學習策略思維」的進階投資人生成繁體中文教學。
+
+要求：
+- 假設讀者熟悉技術分析、衍生品、總經框架
+- 深入機制：量化邏輯、跨市場連動、歷史對比
+- 包含策略啟示：在這個情境下如何思考部位或風險
+- 長度約 320-360 字，分 3 段
+
+嚴格 JSON 回傳，無任何前置文字或 markdown：
+{"topic":"主題10字內","market_context":"為何今天選這個主題（一句話，提及具體數據或事件）","content":"教學內容，段落間用\\n\\n分隔","highlight":"核心策略重點一句話，50字內","quiz":{"q":"需要推理的測驗問題","options":["A.選項","B.選項","C.選項","D.選項"],"answer":0}}`
+};
+
+async function fetchLesson(level){
+  const btn = document.getElementById(level+'-btn');
+  const loadDiv = document.getElementById(level+'-loading');
+  const out = document.getElementById(level+'-output');
+  btn.disabled=true;
+  btn.innerHTML = `<span class="spinner${level==='hard'?' hard':''}"></span> AI 正在搜尋市場熱點...`;
+  loadDiv.style.display='block';
+  answered[level]=false;
+  const done = animateBar(level+'-bar');
+  const todayStr = today.toISOString().slice(0,10);
+
+  try{
+    const raw = await callClaude(PROMPTS[level](todayStr));
+    done();
+    let d;
+    try{
+      const clean = raw.replace(/```json|```/g,'').trim();
+      d = JSON.parse(clean.slice(clean.indexOf('{'), clean.lastIndexOf('}')+1));
+    }catch(e){
+      out.innerHTML=`<div class="lesson-card"><div class="lesson-body"><p>${raw.slice(0,600)}</p></div></div>`;
+      btn.disabled=false; btn.innerHTML='重新生成'; return;
+    }
+    const paras = d.content.split('\n\n').filter(Boolean).map(p=>`<p>${p}</p>`).join('');
+    const badgeClass = level==='mid' ? 'badge-mid' : 'badge-hard';
+    const hlClass = level==='mid' ? 'hl-mid' : 'hl-hard';
+    const levelLabel = level==='mid' ? '中階 · 深化理解' : '困難 · 策略分析';
+    out.innerHTML = `
+      <div class="topic-meta">今日選題依據：${d.market_context}</div>
+      <div class="lesson-card" style="margin-top:10px">
+        <div class="lesson-header">
+          <span class="lesson-badge ${badgeClass}">${levelLabel}</span>
+          <div class="lesson-title">${d.topic}</div>
+        </div>
+        <div class="lesson-body">
+          ${paras}
+          <div class="highlight ${hlClass}">${d.highlight}</div>
+        </div>
+        <div class="lesson-quiz">
+          <div class="quiz-label">理解測驗</div>
+          <div class="quiz-q">${d.quiz.q}</div>
+          <div class="quiz-opts">
+            ${d.quiz.options.map((o,i)=>`<button class="qopt" onclick="answerQuiz(this,${i},${d.quiz.answer},'${level}')">${o}</button>`).join('')}
+          </div>
+          <div id="qres-${level}" style="display:none" class="quiz-result"></div>
+        </div>
+      </div>`;
+  }catch(e){
+    done();
+    out.innerHTML=`<div class="lesson-card"><div class="lesson-body"><p style="color:var(--red)">載入失敗：${e.message}</p></div></div>`;
+  }
+
+  loadDiv.style.display='none';
+  btn.disabled=false;
+  const icon = level==='mid'
+    ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`
+    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+  btn.innerHTML = icon + ' 換一個主題';
+}
+
+function answerQuiz(el, chosen, correct, level){
+  if(answered[level]) return;
+  answered[level]=true;
+  el.closest('.quiz-opts').querySelectorAll('.qopt').forEach((o,i)=>{
+    if(i===correct) o.classList.add('correct');
+    else if(i===chosen && chosen!==correct) o.classList.add('wrong');
+  });
+  const res = document.getElementById('qres-'+level);
+  res.style.display='block';
+  if(chosen===correct){ res.className='quiz-result qr-pass'; res.textContent='答對了，理解正確'; }
+  else { res.className='quiz-result qr-fail'; res.textContent='答錯了，再複習一遍'; }
+}
+
+document.getElementById('api-input').addEventListener('keydown',e=>{ if(e.key==='Enter') saveApiKey(); });
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+init();
+</script>
+</body>
+</html>

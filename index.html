@@ -302,130 +302,119 @@ function animateBar(id){
 }
 
 async function callClaude(prompt){
-  const res = await fetch('https://api.anthropic.com/v1/messages',{
+  const res=await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
-    headers:{
-      'Content-Type':'application/json',
-      'x-api-key': KEY,
-      'anthropic-version':'2023-06-01',
-      'anthropic-dangerous-direct-browser-access':'true'
-    },
-    body: JSON.stringify({
-      model:'claude-sonnet-4-5',
-      max_tokens:1000,
-      tools:[{type:'web_search_20250305',name:'web_search'}],
-      messages:[{role:'user',content:prompt}]
-    })
+    headers:{'Content-Type':'application/json','x-api-key':KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:1200,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:prompt}]})
   });
-  if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||'API 錯誤'); }
+  if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'API錯誤');}
   const data=await res.json();
   return data.content.map(i=>i.type==='text'?i.text:'').filter(Boolean).join('\n');
 }
 
-const PROMPTS = {
-  mid: (d) => `你是財經教育家。今天是 ${d}。
-搜尋今日台股、美股、總體經濟（Fed、利率、匯率、財報）的市場熱點，選一個最值得深入理解的主題，
-為「有基礎想深化理解」的中階投資人生成繁體中文教學。
+function extractJSON(raw){
+  const clean=raw.replace(/```json|```/g,'').trim();
+  const s=clean.indexOf('{'),e=clean.lastIndexOf('}');
+  if(s===-1||e===-1)throw new Error('JSON解析失敗');
+  return JSON.parse(clean.slice(s,e+1));
+}
 
-要求：
-- 假設讀者懂基本財務概念（本益比、殖利率、通膨等）
-- 須說明機制與因果邏輯，不只是定義
-- 結合近期實際市場案例
-- 長度約 280-320 字，分 2-3 段
-
-嚴格 JSON 回傳，無任何前置文字或 markdown：
-{"topic":"主題10字內","market_context":"為何今天選這個主題（一句話，提及具體市場事件）","content":"教學內容，段落間用\\n\\n分隔","highlight":"核心重點一句話，45字內","quiz":{"q":"測驗問題","options":["A.選項","B.選項","C.選項","D.選項"],"answer":0}}`,
-
-  hard: (d) => `你是財經策略分析師。今天是 ${d}。
-搜尋今日台股、美股、總體經濟最重要的市場事件，選一個需要深度分析能力的主題，
-為「理解市場機制、想學習策略思維」的進階投資人生成繁體中文教學。
-
-要求：
-- 假設讀者熟悉技術分析、衍生品、總經框架
-- 深入機制：量化邏輯、跨市場連動、歷史對比
-- 包含策略啟示：在這個情境下如何思考部位或風險
-- 長度約 320-360 字，分 3 段
-
-嚴格 JSON 回傳，無任何前置文字或 markdown：
-{"topic":"主題10字內","market_context":"為何今天選這個主題（一句話，提及具體數據或事件）","content":"教學內容，段落間用\\n\\n分隔","highlight":"核心策略重點一句話，50字內","quiz":{"q":"需要推理的測驗問題","options":["A.選項","B.選項","C.選項","D.選項"],"answer":0}}`
+const PROMPTS={
+  mid:(d)=>`今天${d}。搜尋今日台股/美股/總經熱點，選一個主題，為中階投資人用繁體中文教學。只回傳此JSON無其他文字：{"topic":"主題8字內","context":"選題原因15字","p1":"機制說明60字","p2":"市場案例60字","key":"核心重點30字","chart":{"title":"圖表標題","labels":["標籤1","標籤2","標籤3","標籤4"],"values":[0,0,0,0],"unit":"%"},"quiz":{"q":"測驗問題","opts":["A選項","B選項","C選項","D選項"],"ans":0}}`,
+  hard:(d)=>`今天${d}。搜尋今日台股/美股/總經最重要事件，選需深度分析主題，為進階投資人用繁體中文教學。只回傳此JSON無其他文字：{"topic":"主題8字內","context":"選題原因15字","p1":"機制分析70字","p2":"量化邏輯或歷史對比70字","p3":"策略啟示60字","key":"核心策略重點35字","chart":{"title":"圖表標題","labels":["標籤1","標籤2","標籤3","標籤4"],"values":[0,0,0,0],"unit":"%"},"quiz":{"q":"需推理的測驗問題","opts":["A選項","B選項","C選項","D選項"],"ans":0}}`
 };
 
+function buildChart(chart,level){
+  if(!chart||!chart.values||!chart.labels)return'';
+  const max=Math.max(...chart.values)||1;
+  const color=level==='mid'?'#c9a84c':'#f87171';
+  const bars=chart.labels.map((lb,i)=>{
+    const pct=Math.round((chart.values[i]/max)*100);
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <div style="width:72px;font-size:11px;color:#8a93a6;text-align:right;flex-shrink:0;line-height:1.3">${lb}</div>
+      <div style="flex:1;background:#1e242c;border-radius:3px;height:22px;overflow:hidden">
+        <div style="width:${pct}%;background:${color};height:100%;border-radius:3px"></div>
+      </div>
+      <div style="width:48px;font-size:11px;color:${color};font-family:'DM Mono',monospace;text-align:right;flex-shrink:0">${chart.values[i]}${chart.unit||''}</div>
+    </div>`;
+  }).join('');
+  return `<div style="background:#0f1318;border:0.5px solid #2a3040;border-radius:8px;padding:14px;margin:14px 0">
+    <div style="font-size:10px;color:#4a5568;font-family:'DM Mono',monospace;letter-spacing:0.1em;margin-bottom:12px;text-transform:uppercase">${chart.title||'數據圖解'}</div>
+    ${bars}</div>`;
+}
+
+function renderLesson(d,level){
+  const isMid=level==='mid';
+  const bClass=isMid?'badge-mid':'badge-hard';
+  const hClass=isMid?'hl-mid':'hl-hard';
+  const label=isMid?'中階 · 深化理解':'困難 · 策略分析';
+  const paras=isMid?`<p>${d.p1}</p><p>${d.p2}</p>`:`<p>${d.p1}</p><p>${d.p2}</p>${d.p3?`<p>${d.p3}</p>`:''}`;
+  return `
+    <div style="font-size:11px;color:#4a5568;font-family:'DM Mono',monospace;padding:7px 10px;background:#111418;border-radius:6px;margin-bottom:10px">選題：${d.context}</div>
+    <div class="lesson-card">
+      <div class="lesson-header">
+        <span class="lesson-badge ${bClass}">${label}</span>
+        <div class="lesson-title">${d.topic}</div>
+      </div>
+      <div class="lesson-body">
+        ${paras}
+        ${buildChart(d.chart,level)}
+        <div class="highlight ${hClass}">${d.key}</div>
+      </div>
+      <div class="lesson-quiz">
+        <div class="quiz-label">理解測驗</div>
+        <div class="quiz-q">${d.quiz.q}</div>
+        <div class="quiz-opts">
+          ${d.quiz.opts.map((o,i)=>`<button class="qopt" onclick="answerQuiz(this,${i},${d.quiz.ans},'${level}')">${o}</button>`).join('')}
+        </div>
+        <div id="qres-${level}" style="display:none" class="quiz-result"></div>
+      </div>
+    </div>`;
+}
+
 async function fetchLesson(level){
-  const btn = document.getElementById(level+'-btn');
-  const loadDiv = document.getElementById(level+'-loading');
-  const out = document.getElementById(level+'-output');
+  const btn=document.getElementById(level+'-btn');
+  const loadDiv=document.getElementById(level+'-loading');
+  const out=document.getElementById(level+'-output');
   btn.disabled=true;
-  btn.innerHTML = `<span class="spinner${level==='hard'?' hard':''}"></span> AI 正在搜尋市場熱點...`;
+  btn.innerHTML=`<span class="spinner${level==='hard'?' hard':''}"></span> 搜尋市場熱點中...`;
   loadDiv.style.display='block';
   answered[level]=false;
-  const done = animateBar(level+'-bar');
-  const todayStr = today.toISOString().slice(0,10);
-
+  const done=animateBar(level+'-bar');
   try{
-    const raw = await callClaude(PROMPTS[level](todayStr));
+    const raw=await callClaude(PROMPTS[level](today.toISOString().slice(0,10)));
     done();
-    let d;
-    try{
-      const clean = raw.replace(/```json|```/g,'').trim();
-      d = JSON.parse(clean.slice(clean.indexOf('{'), clean.lastIndexOf('}')+1));
-    }catch(e){
-      out.innerHTML=`<div class="lesson-card"><div class="lesson-body"><p>${raw.slice(0,600)}</p></div></div>`;
-      btn.disabled=false; btn.innerHTML='重新生成'; return;
-    }
-    const paras = d.content.split('\n\n').filter(Boolean).map(p=>`<p>${p}</p>`).join('');
-    const badgeClass = level==='mid' ? 'badge-mid' : 'badge-hard';
-    const hlClass = level==='mid' ? 'hl-mid' : 'hl-hard';
-    const levelLabel = level==='mid' ? '中階 · 深化理解' : '困難 · 策略分析';
-    out.innerHTML = `
-      <div class="topic-meta">今日選題依據：${d.market_context}</div>
-      <div class="lesson-card" style="margin-top:10px">
-        <div class="lesson-header">
-          <span class="lesson-badge ${badgeClass}">${levelLabel}</span>
-          <div class="lesson-title">${d.topic}</div>
-        </div>
-        <div class="lesson-body">
-          ${paras}
-          <div class="highlight ${hlClass}">${d.highlight}</div>
-        </div>
-        <div class="lesson-quiz">
-          <div class="quiz-label">理解測驗</div>
-          <div class="quiz-q">${d.quiz.q}</div>
-          <div class="quiz-opts">
-            ${d.quiz.options.map((o,i)=>`<button class="qopt" onclick="answerQuiz(this,${i},${d.quiz.answer},'${level}')">${o}</button>`).join('')}
-          </div>
-          <div id="qres-${level}" style="display:none" class="quiz-result"></div>
-        </div>
-      </div>`;
+    const d=extractJSON(raw);
+    out.innerHTML=renderLesson(d,level);
   }catch(e){
     done();
-    out.innerHTML=`<div class="lesson-card"><div class="lesson-body"><p style="color:var(--red)">載入失敗：${e.message}</p></div></div>`;
+    out.innerHTML=`<div class="lesson-card"><div class="lesson-body"><p style="color:var(--red);font-size:13px;line-height:1.7">載入失敗：${e.message}</p></div></div>`;
   }
-
   loadDiv.style.display='none';
   btn.disabled=false;
-  const icon = level==='mid'
-    ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`
-    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
-  btn.innerHTML = icon + ' 換一個主題';
+  const icons={mid:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>`,hard:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`};
+  btn.innerHTML=icons[level]+' 換一個主題';
 }
 
-function answerQuiz(el, chosen, correct, level){
-  if(answered[level]) return;
+function answerQuiz(el,chosen,correct,level){
+  if(answered[level])return;
   answered[level]=true;
   el.closest('.quiz-opts').querySelectorAll('.qopt').forEach((o,i)=>{
-    if(i===correct) o.classList.add('correct');
-    else if(i===chosen && chosen!==correct) o.classList.add('wrong');
+    if(i===correct)o.classList.add('correct');
+    else if(i===chosen&&chosen!==correct)o.classList.add('wrong');
   });
-  const res = document.getElementById('qres-'+level);
+  const res=document.getElementById('qres-'+level);
   res.style.display='block';
-  if(chosen===correct){ res.className='quiz-result qr-pass'; res.textContent='答對了，理解正確'; }
-  else { res.className='quiz-result qr-fail'; res.textContent='答錯了，再複習一遍'; }
+  if(chosen===correct){res.className='quiz-result qr-pass';res.textContent='答對了，理解正確';}
+  else{res.className='quiz-result qr-fail';res.textContent='答錯了，再複習一遍';}
 }
 
-document.getElementById('api-input').addEventListener('keydown',e=>{ if(e.key==='Enter') saveApiKey(); });
-if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
-
+document.getElementById('api-input').addEventListener('keydown',e=>{if(e.key==='Enter')saveApiKey();});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 init();
 </script>
+</body>
+</html>
+
 </body>
 </html>
